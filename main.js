@@ -42,7 +42,8 @@ function isSmallCraftOrLakeEffect(properties) {
 
 function drawPolygon(data) {
   // Set overall transparency here, we don't want it per-polygon, as we want them to fully over-draw each other, with red on top, then yellow, then green.
-  var img1 = pImage.make(200, 200, {fillval: '0x00000066'});
+  var img1 = pImage.make(200, 200, {fillval: '0x000000FF'});
+  img1.drawL
   var c2 = img1.getContext('2d');
 
   // In the real app, these would be the colors for the warnings we care about, green for flash flood, yellow for thunderstorm, red for tornado.
@@ -61,7 +62,7 @@ function drawPolygon(data) {
     var scale = xScale < yScale ? xScale : yScale;
 
     // Here I set the color based on the warning type.
-    c2.fillStyle = item.properties.MSG_TYPE === 'WSW' ? lakeEffectSnowColor : smallCraftAdvisoryColor;
+    c2.strokeStyle = item.properties.MSG_TYPE === 'WSW' ? lakeEffectSnowColor : smallCraftAdvisoryColor;
 
 
     // Now we start a path, loop through all the coordinate, apply the scaling, then draw to each point. After the loop
@@ -81,12 +82,12 @@ function drawPolygon(data) {
     }
 
     c2.closePath();
-    c2.fill();
+    c2.stroke();
   });
 
 
   // Writes the png image with our custom encodePNG, which replaces black pixels with fully transparent ones.
-  encodePNG(img1, fs.createWriteStream('out.png'), function(err) {
+  encodePNG(img1, fs.createWriteStream('out2.png'), function(err) {
     console.log("wrote out the png file to out.png");
   });
 }
@@ -117,6 +118,8 @@ function encodePNG (bitmap, outstream, cb) {
     png.pack().pipe(outstream).on('finish', cb);
 }
 
+
+function
 
 
 // Not applicable to the real application, instead we'd use the orthographic projection used in the app.
