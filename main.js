@@ -1,52 +1,22 @@
 const pImage = require('pureimage');
-const PNG = require('pngjs').PNG;
-const shapefile = require("shapefile");
 const fs = require('fs');
 
+const doubleWidthStroke = require('./pureimage-draw-update');
+const encodePNG = require('./draw-transparent-png');
+const convertAndFilterShapefileToGeoJson = require('./shape-file-convert-filter');
 
-getDataAndDrawPolygon();
+// In the real app this should check if it's KMPX, and should pass MSG_TYPE codes for thunderstorm, flash flood, and tornado warnings.
+// Here it filters to KIWX as the station, and warnings of small craft advisory and lake effect snow, since those were available at time of POC.
+convertAndFilterShapefileToGeoJson('KIWX', ['MWW', 'WSW'])
+    .then(drawPolygon);
 
-
-// reads the shape and dbf file and converts it into geoJson, then once complete calls drawPolygon
-// This code is pretty sketchy due to the ugly nested / recursive promise patter the shapefile module uses, but it works.
-function getDataAndDrawPolygon() {
-  const geoJson = [];
-  shapefile.open("current_hazards.shp", "current_hazards.dbf")
-    .then(source => source.read()
-      .then(function log(result) {
-
-        // If done, pass the geoJson to the drawPolygon method
-        if (result.done) {
-          drawPolygon(geoJson);
-        } else {
-          // Otherwise keep building the geoJson, FILTERING by who the WFO is. The real WFO will be KMPX, but when I wrote this there were no warnings in Minnesota.
-          // We'd also want to filter by result.properties.MSG_TYPE, filtering to only flash flood, thunderstorm, and tornado messages.
-          if (isStationWeCareAbout(result.value.properties.WFO) && isSmallCraftOrLakeEffect(result.value.properties)) {
-            geoJson.push(result.value);
-          }
-          return source.read().then(log);
-        }
-      }))
-    .catch(error => console.error(error.stack));
-}
-
-// In the real app this should check if it's KMPX
-function isStationWeCareAbout(wfo) {
-  return wfo === 'KIWX';
-}
-
-// Filters to message type codes that match the warning type, in this case small craft advisory and lake effect snow, since those were available at time of POC.
-function isSmallCraftOrLakeEffect(properties) {
-  return properties.MSG_TYPE === 'MWW' || properties.MSG_TYPE === 'WSW';
-}
 
 function drawPolygon(data) {
-  // Set overall transparency here, we don't want it per-polygon, as we want them to fully over-draw each other, with red on top, then yellow, then green.
-  var img1 = pImage.make(200, 200, {fillval: '0x00000066'});
+  var img1 = pImage.make(200, 200, {fillval: '0x000000FF'});
   var c2 = img1.getContext('2d');
 
   // In the real app, these would be the colors for the warnings we care about, green for flash flood, yellow for thunderstorm, red for tornado.
-  // Again none of those were available for the POC, so instead
+  // Again none of those were available for the POC, so instead we have red for lake effect and green for small craft for the POC
   const lakeEffectSnowColor = 'rgba(255, 0, 0, 1.0)';
   const smallCraftAdvisoryColor = 'rgba(0, 255, 0, 1.0)';
 
@@ -61,7 +31,9 @@ function drawPolygon(data) {
     var scale = xScale < yScale ? xScale : yScale;
 
     // Here I set the color based on the warning type.
-    c2.fillStyle = item.properties.MSG_TYPE === 'WSW' ? lakeEffectSnowColor : smallCraftAdvisoryColor;
+    c2.strokeStyle = item.properties.MSG_TYPE === 'WSW' ? lakeEffectSnowColor : smallCraftAdvisoryColor;
+
+    c2.stroke = doubleWidthStroke;
 
 
     // Now we start a path, loop through all the coordinate, apply the scaling, then draw to each point. After the loop
@@ -81,7 +53,7 @@ function drawPolygon(data) {
     }
 
     c2.closePath();
-    c2.fill();
+    c2.stroke();
   });
 
 
@@ -89,32 +61,6 @@ function drawPolygon(data) {
   encodePNG(img1, fs.createWriteStream('out.png'), function(err) {
     console.log("wrote out the png file to out.png");
   });
-}
-
-
-// This PNG encode code replaces black pixels with perfectly transparent ones, we need this since we don't want a background color.
-function encodePNG (bitmap, outstream, cb) {
-    var png = new PNG({
-        width:bitmap.width,
-        height:bitmap.height,
-    });
-
-    for(var x=0; x<bitmap.width; x++) {
-        for(var y=0; y<bitmap.height; y++) {
-            var idx = (png.width * y + x) << 2;
-            png.data[idx] = bitmap._buffer[idx];
-            png.data[idx + 1] = bitmap._buffer[idx + 1];
-            png.data[idx + 2] = bitmap._buffer[idx + 2];
-
-            if (png.data[idx] === 0 && png.data[idx+1] === 0 && png.data[idx+2] === 0) {
-              png.data[idx+3] = png.data[idx+3] = 0;
-            } else {
-              png.data[idx + 3] = bitmap._buffer[idx + 3];
-            }
-          }
-    }
-
-    png.pack().pipe(outstream).on('finish', cb);
 }
 
 
